@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.5)
 
 project(VideoDecode VERSION 0.1 LANGUAGES CXX)
 
@@ -9,9 +9,11 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-
+add_compile_options(/utf-8)
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Multimedia)
+
 set(CMAKE_MODULE_PATH C:\\zwh\\3rdparty\\.cmake)
 
 find_package(ffmpeg REQUIRED)
@@ -20,9 +22,6 @@ message(STATUS ${FFMPEG_INCLUDE_DIRS})
 message(STATUS ${FFMPEG_LIBS})
 set(PROJECT_SOURCES
     main.cpp
-
-    videodecode.cpp
-    videodecode.h
 )
 include_directories(${FFMPEG_INCLUDE_DIRS})
 
@@ -46,17 +45,25 @@ else()
         add_executable(VideoDecode
             ${PROJECT_SOURCES}
             main.cpp
-            videodecode.cpp videodecode.h
             widget.cpp widget.h widget.ui
-            readthread.cpp
-            readthread.h
-            playimage.cpp playimage.h
-            playimagelabel.cpp playimagelabel.h
+            playstate.h
+            audioplay.cpp audioplay.h
+            blockingqueue.cpp blockingqueue.h
+            demuxthread.cpp demuxthread.h
+            avpacketqueue.h
+            decodethread.cpp decodethread.h
+            avframequeue.h
+            i420render.cpp i420render.h
+            avsynctimer.h
+            frameconvert.h frameconvert.cpp
+
         )
     endif()
 endif()
 
+
 target_link_libraries(VideoDecode PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+target_link_libraries(VideoDecode PRIVATE Qt5::Multimedia)
 target_link_libraries(VideoDecode PRIVATE ${FFMPEG_LIBS})
 #target_link_libraries(VideoDecode PRIVATE ${FFMPEG_BINS})
 
