@@ -1,4 +1,4 @@
-﻿#include "widget.h"
+#include "widget.h"
 #include "ui_widget.h"
 
 #include <QFileDialog>
@@ -6,39 +6,34 @@
 
 Widget::Widget(QWidget *parent)
     : QWidget(parent)
-    , ui(new Ui::Widget)
+    , ui(new Ui::Widget),maudioPktQue(new AVPacketQueue),
+    mvideoPktQue(new AVPacketQueue),maudioFraQue(new AVFrameQueue)
+    ,mvideoFraQue(new AVFrameQueue),mdemuxThread(new DemuxThread(maudioPktQue,mvideoPktQue))
+    ,mvideoDecThread(new DecodeThread(mvideoPktQue,mvideoFraQue))
+    ,maudioDecThread(new DecodeThread(maudioPktQue,maudioFraQue))
+    ,mavsyn (new AVSyncTimer)
 {
+
     ui->setupUi(this);
-    this->setWindowTitle(QString::fromLocal8Bit("Qt+ffmpeg视频播放（软解码 + OpenGL显示RGB）Demo"));
+    this->setWindowTitle(QString::fromUtf8("Qt+ffmpeg视频播放（软解码 + OpenGL显示RGB）Demo"));
 
+    // mvideoPlay = new VideoPlay(this,mvideoFraQue);
+    // ui->verticalLayout->addWidget(mvideoPlay);
 
-    // 使用QOpenGLWindow绘制
-//     playImage = new PlayImage;
-// #if USE_WINDOW
-//     ui->verticalLayout->addWidget(QWidget::createWindowContainer(playImage));   // 这一步加载速度要比OpenGLWidget慢一点
-// #else
-//     ui->verticalLayout->addWidget(playImage);
-// #endif
+    mframeCon =new FrameConvert(this,mvideoFraQue,mavsyn);
 
-    playimagelabel = new PlayImageLabel;
-    playimagelabel ->setParent(this);
+    mrender = new I420Render(this);
+    ui->verticalLayout->addWidget(mrender);
 
-    ui->verticalLayout->addWidget(playimagelabel);
-    m_readThread = new ReadThread();
-    //connect(m_readThread, &ReadThread::updateImage, playImage, &PlayImage::updateImage);
-    connect(m_readThread,&ReadThread::updateImage,playimagelabel,&PlayImageLabel::updateImage);
-    connect(m_readThread, &ReadThread::playState, this, &Widget::on_playState);
+    maudioPlay = new AudioPlay(this,maudioFraQue,mavsyn);
+
+    connect(mframeCon,&FrameConvert::updateShow,mrender,&I420Render::updateShow);
+
 }
 
 Widget::~Widget()
 {
     // 释放视频读取线程
-    if(m_readThread)
-    {
-        m_readThread->close();
-        m_readThread->wait();
-        delete m_readThread;
-    }
     delete ui;
 }
 
@@ -48,14 +43,28 @@ Widget::~Widget()
 void Widget::on_but_file_clicked()
 {
     QString strName = QFileDialog::getOpenFileName(this,
-                                                   QString::fromLocal8Bit("选择播放视频~！"),
+                                                   QString::fromUtf8("选择播放视频~！"),
                                                    "/",
-                                                   QString::fromLocal8Bit("视频 (*.mp4 *.m4v *.mov *.avi *.flv);; 其它(*)"));
+                                                   QString::fromUtf8("视频 (*.mp4 *.m4v *.mov *.avi *.flv);; 其它(*)"));
     if(strName.isEmpty())
     {
         return;
     }
+
     ui->com_url->setCurrentText(strName);
+
+    mdemuxThread->open(strName.toStdString().c_str());
+    maudioDecThread->init(mdemuxThread->getAudioCodecPar(),2);
+    mvideoDecThread->init(mdemuxThread->getVideoCodecPar(),2);
+
+    AVCodecContext *codecCtx=maudioDecThread->getCodecCtx();
+    maudioPlay->init(codecCtx->ch_layout,codecCtx->sample_rate,codecCtx->sample_fmt,mdemuxThread->getAudioTimebase());
+    mframeCon->setTimeBase(mdemuxThread->getVideoTimebase());
+
+    codecCtx = mvideoDecThread->getCodecCtx();
+    mrender->init(codecCtx->width,codecCtx->height);
+
+
 }
 
 /**
@@ -64,14 +73,20 @@ void Widget::on_but_file_clicked()
 void Widget::on_but_open_clicked()
 {
 
-    if(ui->but_open->text() == QString::fromLocal8Bit("开始播放"))
+    if(ui->but_open->text() == QString::fromUtf8("开始播放"))
     {
-        m_readThread->open(ui->com_url->currentText());
-        qDebug()<<"open "<<ui->com_url->currentText();
+        mavsyn->InitClock();
+        mdemuxThread->start();
+        mvideoDecThread->start();
+        maudioDecThread->start();
+        maudioPlay->start();
+        mframeCon->start();
+        ui->but_open->setText(QString::fromUtf8("停止播放"));
+
     }
     else
     {
-        m_readThread->close();
+       // m_readThread->close();
     }
 }
 
@@ -80,15 +95,15 @@ void Widget::on_but_open_clicked()
  */
 void Widget::on_but_pause_clicked()
 {
-    if(ui->but_pause->text() == QString::fromLocal8Bit("暂停"))
+    if(ui->but_pause->text() == QString::fromUtf8("暂停"))
     {
-        m_readThread->pause(true);
-        ui->but_pause->setText(QString::fromLocal8Bit("继续"));
+       // m_readThread->pause(true);
+        ui->but_pause->setText(QString::fromUtf8("继续"));
     }
     else
     {
-        m_readThread->pause(false);
-        ui->but_pause->setText(QString::fromLocal8Bit("暂停"));
+        //->pause(false);
+        ui->but_pause->setText(QString::fromUtf8("暂停"));
     }
 }
 
@@ -96,18 +111,18 @@ void Widget::on_but_pause_clicked()
  * @brief        根据视频播放状态切换界面设置
  * @param state
  */
-void Widget::on_playState(ReadThread::PlayState state)
+void Widget::on_playState(PlayState state)
 {
     //qDebug()<<state;
-    if(state == ReadThread::play)
+    if(state == PlayState::PLAY)
     {
-        this->setWindowTitle(QString::fromLocal8Bit("正在播放：%1").arg(m_readThread->url()));
-        ui->but_open->setText(QString::fromLocal8Bit("停止播放"));
+        //this->setWindowTitle(QString::fromUtf8("正在播放：%1").arg(m_readThread->url()));
+        ui->but_open->setText(QString::fromUtf8("停止播放"));
     }
     else
     {
-        ui->but_open->setText(QString::fromLocal8Bit("开始播放"));
-        ui->but_pause->setText(QString::fromLocal8Bit("暂停"));
-        this->setWindowTitle(QString::fromLocal8Bit("Qt+ffmpeg视频播放（软解码 + OpenGL显示RGB）Demo  V%1"));
+        ui->but_open->setText(QString::fromUtf8("开始播放"));
+        ui->but_pause->setText(QString::fromUtf8("暂停"));
+        this->setWindowTitle(QString::fromUtf8("Qt+ffmpeg视频播放（软解码 + OpenGL显示RGB）Demo  V%1"));
     }
 }
