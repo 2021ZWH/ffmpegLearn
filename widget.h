@@ -5,6 +5,7 @@
 #include <QWidget>
 #include <QThreadPool>
 #include <QTimer>
+#include <QCloseEvent>
 #include "PlayState.h"
 #include "demuxthread.h"
 #include "decodethread.h"
@@ -25,6 +26,9 @@ public:
     Widget(QWidget *parent = nullptr);
     ~Widget();
 
+protected:
+    void closeEvent(QCloseEvent *event) ;
+
 private slots:
     void on_but_file_clicked();
 
@@ -35,8 +39,13 @@ private slots:
     void on_playState(PlayState state);
 
 private:
+    void startAV();
+    void stopAV();
+    void endAV();
+
+    PlayState mstate=PlayState::START;
     Ui::Widget *ui;
-    I420Render *mrender=nullptr;
+
     AudioPlay *maudioPlay = nullptr;
 
     AVPacketQueue *maudioPktQue = nullptr;
@@ -50,7 +59,7 @@ private:
     DecodeThread *maudioDecThread=nullptr;
     FrameConvert *mframeCon = nullptr;
 
-    AVSyncTimer *mavsyn;
+    AVSyncTimer *mavsyn = nullptr;
 
 
 

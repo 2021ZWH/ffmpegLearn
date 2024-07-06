@@ -46,7 +46,17 @@ public:
     {
         return mfmtCtx->streams[maudioStreamId]->time_base;
     }
-
+    long long  getAVDuration()
+    {
+        long long secs= -1;
+        if(AV_NOPTS_VALUE != mfmtCtx->duration)
+        {
+            int64_t duration =mfmtCtx->duration + (mfmtCtx->duration <= INT64_MAX - 5000 ? 5000:0);
+            secs= duration / AV_TIME_BASE;
+        }
+        return secs;
+    }
+    void stop();
 private:
     void run() override;
     AVPacketQueue *maudioQueue;
@@ -56,6 +66,8 @@ private:
     AVFormatContext *mfmtCtx=NULL;
     int maudioStreamId=-1;
     int mvideoStreamId=-1;
+
+    bool isrun=1;
 };
 
 #endif // DEMUXTHREAD_H

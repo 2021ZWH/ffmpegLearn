@@ -74,6 +74,79 @@ void AudioPlay::init(const AVChannelLayout &ch_layout,const int &sample_rate,AVS
     mstreamOut = maudioOut->start();
 
 }
+void AudioPlay::inPlay()
+{
+    //printf("audio frame size=%d\n",maudioFraQue->size());
+    AVFrame *frame=maudioFraQue->pop(2);
+
+    if(frame == NULL)
+    {
+        printf("audio frame empty\n");
+        return;
+
+    }
+    //if(moutBuff == NULL) return ;
+    mavsyn->SetClock(frame->pts*av_q2d(mtimeBase));
+    int time=frame->pts*av_q2d(mtimeBase);
+    if(time - nowtime >= 1)
+    {
+        nowtime=time;
+        emit timeChanged(nowtime);
+    }
+    //qDebug()<<"time :"<<frame->pts*av_q2d(mtimeBase);
+
+    // if(strlen((char*)(*frame->extended_data)) == 0) continue ;
+    //原采样样本 * 目的采样率除以原采样率 向上取整
+    //根据原音频数据与目的音频数据的播放时长一致计算
+    //播放时长 == 采样样品数/采样率
+    // printf("frame sr = %d",frame->sample_rate);
+
+    int dst_nb_samples =frame->nb_samples * mdstSampleRate / frame->sample_rate+256;
+    /*参数 1：音频重采样的上下文
+                参数 2：输出的指针。传递的输出的数组
+                参数 3：输出的样本数量，不是字节数。单通道的样本数量。
+                参数 4：输入的数组，AVFrame 解码出来的 DATA
+                参数 5：输入的单通道的样本数量。
+                */
+    //重采样，返回重采样后的样品数量
+    // if(av_sample_fmt_is_planar(msrcFormat) ) qDebug()<<"is planar";
+    const uint8_t** in = (const uint8_t **)frame->extended_data;
+    uint8_t **out = &moutBuff;
+    int len = swr_convert(mswrCtx,
+                          out,
+                          dst_nb_samples,
+                          in,
+                          frame->nb_samples);
+
+    if(len<=0)
+    {
+        return ;
+    }
+    //qDebug("convert length is: %d.\n",len);
+
+    int out_size = av_samples_get_buffer_size(NULL,
+                                              mdstChLayout.nb_channels,
+                                              len,
+                                              mdstFormat,
+                                              0);
+    //printf("buffer size = %d out sample = %d\n",out_size,len);
+
+
+    //outfile.write((char *)moutBuff,out_size);
+    //qDebug()<<out_size<<" "<<frame->sample_rate<<" "<<frame->nb_samples<<" "<<dst_nb_samples;
+
+    while(maudioOut->bytesFree() < out_size)
+    {
+        printf("wait\n");
+        QThread::msleep(10);
+    }
+
+    mstreamOut->write(QByteArray::fromRawData((char *)moutBuff,out_size));
+    memset(moutBuff,0,out_size);
+
+    av_frame_free(&frame);
+
+}
 void AudioPlay::run()
 {
     if(maudioOut == NULL || mswrCtx == NULL )
@@ -84,66 +157,29 @@ void AudioPlay::run()
     }
     while(1)
     {
-        AVFrame *frame=maudioFraQue->pop(2);
+        PlayState state=PAUSE;
+        {
+            QMutexLocker locker(&mmutex);
+            state=mstate;
 
-        if(frame == NULL) continue ;
-        //if(moutBuff == NULL) return ;
-        mavsyn->SetClock(frame->pts*av_q2d(mtimeBase));
+        }
+       // printf("state = %d\n",state);
 
-       // if(strlen((char*)(*frame->extended_data)) == 0) continue ;
-        //原采样样本 * 目的采样率除以原采样率 向上取整
-        //根据原音频数据与目的音频数据的播放时长一致计算
-        //播放时长 == 采样样品数/采样率
-       // printf("frame sr = %d",frame->sample_rate);
-
-        int dst_nb_samples =frame->nb_samples * mdstSampleRate / frame->sample_rate+256;
-        /*参数 1：音频重采样的上下文
-                参数 2：输出的指针。传递的输出的数组
-                参数 3：输出的样本数量，不是字节数。单通道的样本数量。
-                参数 4：输入的数组，AVFrame 解码出来的 DATA
-                参数 5：输入的单通道的样本数量。
-                */
-        //重采样，返回重采样后的样品数量
-        // if(av_sample_fmt_is_planar(msrcFormat) ) qDebug()<<"is planar";
-        const uint8_t** in = (const uint8_t **)frame->extended_data;
-        uint8_t **out = &moutBuff;
-        int len = swr_convert(mswrCtx,
-                              out,
-                              dst_nb_samples,
-                              in,
-                              frame->nb_samples);
-
-        if(len<=0)
+        if(state  == PlayState::PLAY)
+        {
+            //printf("audio play\n");
+            inPlay();
+        }
+        else if(state == PlayState::PAUSE)
+        {
+            msleep(10);
+        }
+        else if(state == PlayState::END)
         {
             return ;
         }
-        //qDebug("convert length is: %d.\n",len);
-
-        int out_size = av_samples_get_buffer_size(NULL,
-                                                  mdstChLayout.nb_channels,
-                                                  len,
-                                                  mdstFormat,
-                                                  0);
-        //printf("buffer size = %d out sample = %d\n",out_size,len);
-
-
-         //outfile.write((char *)moutBuff,out_size);
-        //qDebug()<<out_size<<" "<<frame->sample_rate<<" "<<frame->nb_samples<<" "<<dst_nb_samples;
-
-         while(maudioOut->bytesFree() < out_size)
-             QThread::msleep(10);
-
-        mstreamOut->write(QByteArray::fromRawData((char *)moutBuff,out_size));
-        memset(moutBuff,0,out_size);
-
-
-
-
-
-        av_frame_free(&frame);
 
     }
 
-
-
 }
+

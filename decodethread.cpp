@@ -39,11 +39,15 @@ int DecodeThread::init(const AVCodecParameters *par ,const int &timeout)
     return 0;
 }
 
+void DecodeThread::stop()
+{
+    isrun=0;
+}
 void DecodeThread::run()
 {
     int ret = 0;
     AVFrame *frame = av_frame_alloc();
-    while(1)
+    while(isrun)
     {
         // 1920*1080*1.5*100
         if(mframeQueue->size() > 10)
@@ -97,4 +101,6 @@ void DecodeThread::run()
             //     printf("video no packet\n");
         }
     }
+
+    av_frame_free(&frame);
 }

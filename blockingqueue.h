@@ -1,4 +1,4 @@
-﻿
+
 #ifndef BLOCKINGQUEUE_H
 #define BLOCKINGQUEUE_H
 
@@ -14,6 +14,7 @@ class BlockingQueue
 {
 public:
     BlockingQueue(){};
+
     void put(const T& value)
     {
         QMutexLocker locker(&m_mutex);

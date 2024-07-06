@@ -11,6 +11,10 @@ extern "C"{
 class AVFrameQueue{
 public:
     AVFrameQueue(){};
+    ~AVFrameQueue()
+    {
+        this->release();
+    }
     AVFrame *pop(const int timeout)
     {
         AVFrame *frame =NULL;
@@ -32,6 +36,14 @@ public:
     int size() const
     {
         return mframeQueue.size();
+    }
+    void release()
+    {
+        while(mframeQueue.size())
+        {
+            AVFrame *frame=this->pop(2);
+            if(frame) av_frame_free(&frame);
+        }
     }
 private:
     BlockingQueue<AVFrame*> mframeQueue;

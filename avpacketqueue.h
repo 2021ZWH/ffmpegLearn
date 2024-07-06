@@ -1,4 +1,4 @@
-﻿#ifndef AVPACKETQUEUE_H
+#ifndef AVPACKETQUEUE_H
 #define AVPACKETQUEUE_H
 
 #include"blockingqueue.h"
@@ -11,6 +11,10 @@ class AVPacketQueue
 {
 public:
     AVPacketQueue(){};
+    ~AVPacketQueue()
+    {
+        this->release();
+    }
     int size() const
     {
         return mqueue.size();
@@ -31,6 +35,14 @@ public:
         AVPacket *mval = av_packet_alloc();
         av_packet_move_ref(mval,val);
         mqueue.put(mval);
+    }
+    void release()
+    {
+        while(mqueue.size())
+        {
+            AVPacket *packet = this->pop(2);
+            if(packet) av_packet_free(&packet);
+        }
     }
 
 private:

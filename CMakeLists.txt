@@ -56,6 +56,8 @@ else()
             i420render.cpp i420render.h
             avsynctimer.h
             frameconvert.h frameconvert.cpp
+            avprogressbar.h avprogressbar.cpp
+            avprogressgroup.h avprogressgroup.cpp
 
         )
     endif()

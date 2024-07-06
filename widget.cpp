@@ -17,17 +17,16 @@ Widget::Widget(QWidget *parent)
     ui->setupUi(this);
     this->setWindowTitle(QString::fromUtf8("Qt+ffmpeg视频播放（软解码 + OpenGL显示RGB）Demo"));
 
-    // mvideoPlay = new VideoPlay(this,mvideoFraQue);
-    // ui->verticalLayout->addWidget(mvideoPlay);
-
     mframeCon =new FrameConvert(this,mvideoFraQue,mavsyn);
-
-    mrender = new I420Render(this);
-    ui->verticalLayout->addWidget(mrender);
-
     maudioPlay = new AudioPlay(this,maudioFraQue,mavsyn);
 
-    connect(mframeCon,&FrameConvert::updateShow,mrender,&I420Render::updateShow);
+
+    connect(mframeCon,&FrameConvert::updateShow,ui->yuvGLRender,&I420Render::updateShow);
+    connect(maudioPlay,&AudioPlay::timeChanged,ui->progressGroup,&AVProgressGroup::setNowTime);
+
+    mavsyn->InitClock();
+
+
 
 }
 
@@ -35,8 +34,29 @@ Widget::~Widget()
 {
     // 释放视频读取线程
     delete ui;
+
+    delete maudioFraQue;
+    delete mvideoFraQue;
 }
 
+void Widget::startAV()
+{
+    mstate=PlayState::PLAY;
+    mframeCon->setState(mstate);
+    maudioPlay->setState(mstate);
+}
+void Widget::stopAV()
+{
+    mstate=PlayState::PAUSE;
+    mframeCon->setState(mstate);
+    maudioPlay->setState(mstate);
+}
+void Widget::endAV()
+{
+    mstate=PlayState::END;
+    mframeCon->setState(mstate);
+    maudioPlay->setState(mstate);
+}
 /**
  * @brief  获取本地视频路径
  */
@@ -57,12 +77,22 @@ void Widget::on_but_file_clicked()
     maudioDecThread->init(mdemuxThread->getAudioCodecPar(),2);
     mvideoDecThread->init(mdemuxThread->getVideoCodecPar(),2);
 
+    ui->progressGroup->setAVDuration(mdemuxThread->getAVDuration());
+
     AVCodecContext *codecCtx=maudioDecThread->getCodecCtx();
     maudioPlay->init(codecCtx->ch_layout,codecCtx->sample_rate,codecCtx->sample_fmt,mdemuxThread->getAudioTimebase());
     mframeCon->setTimeBase(mdemuxThread->getVideoTimebase());
 
     codecCtx = mvideoDecThread->getCodecCtx();
-    mrender->init(codecCtx->width,codecCtx->height);
+    ui->yuvGLRender->init(codecCtx->width,codecCtx->height);
+
+    mdemuxThread->start();
+    mvideoDecThread->start();
+    maudioDecThread->start();
+
+    maudioPlay->start();
+    mframeCon->start();
+
 
 
 }
@@ -75,17 +105,15 @@ void Widget::on_but_open_clicked()
 
     if(ui->but_open->text() == QString::fromUtf8("开始播放"))
     {
-        mavsyn->InitClock();
-        mdemuxThread->start();
-        mvideoDecThread->start();
-        maudioDecThread->start();
-        maudioPlay->start();
-        mframeCon->start();
-        ui->but_open->setText(QString::fromUtf8("停止播放"));
 
+        ui->but_open->setText(QString::fromUtf8("结束播放"));
+        startAV();
     }
     else
     {
+        ui->but_open->setText(QString::fromUtf8("开始播放"));
+
+        endAV();
        // m_readThread->close();
     }
 }
@@ -98,11 +126,13 @@ void Widget::on_but_pause_clicked()
     if(ui->but_pause->text() == QString::fromUtf8("暂停"))
     {
        // m_readThread->pause(true);
+        stopAV();
         ui->but_pause->setText(QString::fromUtf8("继续"));
     }
     else
     {
         //->pause(false);
+        startAV();
         ui->but_pause->setText(QString::fromUtf8("暂停"));
     }
 }
@@ -125,4 +155,13 @@ void Widget::on_playState(PlayState state)
         ui->but_pause->setText(QString::fromUtf8("暂停"));
         this->setWindowTitle(QString::fromUtf8("Qt+ffmpeg视频播放（软解码 + OpenGL显示RGB）Demo  V%1"));
     }
+}
+
+void Widget::closeEvent(QCloseEvent *event)
+{
+    endAV();
+    maudioDecThread->stop();
+    mvideoDecThread->stop();
+    mdemuxThread->stop();
+
 }

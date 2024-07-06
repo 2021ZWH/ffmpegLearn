@@ -1,4 +1,4 @@
-﻿#ifndef DECODETHREAD_H
+#ifndef DECODETHREAD_H
 #define DECODETHREAD_H
 
 #include<QThread>
@@ -12,6 +12,7 @@ public:
     AVCodecContext *getCodecCtx(){
         return mcodecCtx;
     }
+    void stop();
 
 private:
     void run() override;
@@ -20,6 +21,8 @@ private:
     AVFrameQueue *mframeQueue=NULL;
     int mtimeout=0;
     char err2str[256];
+
+    bool isrun=1;
 };
 
 #endif // DECODETHREAD_H

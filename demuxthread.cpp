@@ -42,13 +42,16 @@ int DemuxThread::open(const char *url)
 
     return 0;
 }
-
+void DemuxThread::stop()
+{
+    isrun=0;
+}
 void DemuxThread::run()
 {
     printf("DemuxThread::Run() into\n");
     AVPacket packet;
     int ret = 0;
-    while(1) {
+    while(isrun) {
         if(maudioQueue->size() > 100 || mvideoQueue->size() > 100)
         {
             QThread::msleep(10);

@@ -4,10 +4,11 @@
 
 #include <QAudioOutput>
 #include <QAudioFormat>
-#include <fstream>
 #include <QThread>
+#include <QMutex>
 #include "avframequeue.h"
 #include "avsynctimer.h"
+#include "playstate.h"
 #ifdef __cplusplus
 extern "C"{
 #include"libavcodec/avcodec.h"
@@ -24,9 +25,18 @@ public:
     ~AudioPlay();
     void init(const AVChannelLayout &ch_layout,const int &sample_rate,AVSampleFormat format,AVRational time_base);
 
-    void run() override;
+
+    void setState(PlayState state){
+        QMutexLocker locker(&mmutex);
+        mstate=state;
+    }
+signals:
+    void timeChanged(int time);
+
 
 private:
+    void run() override;
+    void inPlay();
     AVFrameQueue *maudioFraQue = NULL;
     AVSyncTimer *mavsyn;
 
@@ -45,6 +55,11 @@ private:
     uint8_t *moutBuff=NULL;
 
     AVRational mtimeBase;
+    int nowtime=0;//现在播放的时间
+
+    QMutex mmutex;
+
+    PlayState mstate=PAUSE;
 
   // std::ofstream outfile;
 
